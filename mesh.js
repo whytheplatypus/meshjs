@@ -166,28 +166,19 @@ EventEmitter.prototype.emit = function(type) {
  * and wrapping the output of the connections into a simplified nodejs Stream API
  */
 
-var Mesh = function(id, opts){
+var Mesh = function(peer){
 	var self = this;
-	var options;
-	if (id && id.constructor == Object) {
-		options = id;
-		id = undefined;
-	}
+
 	if (!(this instanceof Mesh)) return new Mesh(id, options);
 	EventEmitter.call(this);
+    this.peer = peer;
 
-	if(id === undefined){
-		this.peer = new Peer(options);
-	} else {
-		this.peer = new Peer(id, opts);
-	}
-
-	self.peer.on('connection', function(conn){
+	self.peer.on('connection', function(channel){
 		self.write({
            type:"connect",
-           id:conn.peer
+           id:channel.peer
         });
-        conn.on('data', function(data) {
+        channel.on('data', function(data) {
             self.read(data);
         });
     });
@@ -228,26 +219,24 @@ Mesh.prototype.connect = function(id) {
        id:id
     });
     
-    var conn = self.peer.connect(id);
-    conn.on('data', function(data){
+    var channel = self.peer.connect(id, {label: "mesh"});
+    channel.on('data', function(data){
         self.read(data);
     });
-    return conn;
+    return channel;
 };
 
 Mesh.prototype.write = function(package){
 	var self = this;
 	for(var key in self.peer.connections){
     	var conn = self.peer.connections[key];
-        for(var label in conn){
-            var channel = conn[label]
-            if(channel.open){
+        var channel = conn['mesh']
+        if(channel.open){
+            channel.send(package);
+        } else {
+            channel.once('open', function() {
                 channel.send(package);
-            } else {
-                channel.once('open', function() {
-                    channel.send(package);
-                });
-            }
+            });
         }
     }
 };
